@@ -16,6 +16,7 @@ from fontra.core.classes import (
     GlyphAxis,
     GlyphSource,
     Guideline,
+    ImageData,
     Kerning,
     Layer,
     LineMetric,
@@ -24,7 +25,7 @@ from fontra.core.classes import (
     VariableGlyph,
 )
 from fontra.core.path import PackedPathPointPen
-from fontra.core.protocols import ReadableFontBackend
+from fontra.core.protocols import WritableFontBackend
 from fontTools.designspaceLib import DesignSpaceDocument
 from fontTools.misc.transform import DecomposedTransform
 from glyphsLib.builder.axes import (
@@ -81,7 +82,7 @@ GS_FORMAT_3_KERN_SIDES = [
 
 class GlyphsBackend:
     @classmethod
-    def fromPath(cls, path: PathLike) -> ReadableFontBackend:
+    def fromPath(cls, path: PathLike) -> WritableFontBackend:
         self = cls()
         self._setupFromPath(path)
         return self
@@ -157,6 +158,14 @@ class GlyphsBackend:
     async def getGlyphMap(self) -> dict[str, list[int]]:
         return self.glyphMap
 
+    async def putGlyphMap(self, value: dict[str, list[int]]) -> None:
+        print("GlyphsBackend putGlyphMap: ", value)
+        pass
+
+    async def deleteGlyph(self, glyphName):
+        print("GlyphsBackend deleteGlyph: ", glyphName)
+        pass
+
     async def getFontInfo(self) -> FontInfo:
         infoDict = {}
         for name in rootInfoNames:
@@ -172,14 +181,30 @@ class GlyphsBackend:
 
         return FontInfo(**infoDict)
 
+    async def putFontInfo(self, fontInfo: FontInfo):
+        print("GlyphsBackend putFontInfo: ", fontInfo)
+        pass
+
     async def getSources(self) -> dict[str, FontSource]:
         return gsMastersToFontraFontSources(self.gsFont, self.locationByMasterID)
+
+    async def putSources(self, sources: dict[str, FontSource]) -> None:
+        print("GlyphsBackend putSources: ", sources)
+        pass
 
     async def getAxes(self) -> Axes:
         return Axes(axes=self.axes)
 
+    async def putAxes(self, axes: Axes) -> None:
+        print("GlyphsBackend putAxes: ", axes)
+        pass
+
     async def getUnitsPerEm(self) -> int:
         return self.gsFont.upm
+
+    async def putUnitsPerEm(self, value: int) -> None:
+        print("GlyphsBackend putUnitsPerEm: ", value)
+        pass
 
     async def getKerning(self) -> dict[str, Kerning]:
         # TODO: RTL kerning: https://docu.glyphsapp.com/#GSFont.kerningRTL
@@ -200,12 +225,31 @@ class GlyphsBackend:
             kerning["vkrn"] = kerningVertical
         return kerning
 
+    async def putKerning(self, kerning: dict[str, Kerning]) -> None:
+        print("GlyphsBackend putKerning: ", kerning)
+        pass
+
     async def getFeatures(self) -> OpenTypeFeatures:
         # TODO: extract features
         return OpenTypeFeatures()
 
+    async def putFeatures(self, features: OpenTypeFeatures) -> None:
+        print("GlyphsBackend putFeatures: ", features)
+        pass
+
+    async def getBackgroundImage(self, imageIdentifier: str) -> ImageData | None:
+        return None
+
+    async def putBackgroundImage(self, imageIdentifier: str, data: ImageData) -> None:
+        print("GlyphsBackend putBackgroundImage: ", imageIdentifier, data)
+        pass
+
     async def getCustomData(self) -> dict[str, Any]:
         return {}
+
+    async def putCustomData(self, lib):
+        print("GlyphsBackend putCustomData: ", lib)
+        pass
 
     async def getGlyph(self, glyphName: str) -> VariableGlyph | None:
         if glyphName not in self.glyphNameToIndex:
@@ -329,6 +373,12 @@ class GlyphsBackend:
             for name, value in location.items()
             if value != localAxesByName[name].defaultValue
         }
+
+    async def putGlyph(
+        self, glyphName: str, glyph: VariableGlyph, codePoints: list[int]
+    ) -> None:
+        print("GlyphsBackend putGlyph: ", glyphName, glyph, codePoints)
+        pass
 
     async def aclose(self) -> None:
         pass
