@@ -8,7 +8,9 @@ dataDir = pathlib.Path(__file__).resolve().parent / "data"
 
 glyphs2Path = dataDir / "GlyphsUnitTestSans.glyphs"
 glyphs3Path = dataDir / "GlyphsUnitTestSans3.glyphs"
-glyphsPackagePath = dataDir / "GlyphsUnitTestSans3.glyphspackage"
+glyphsPackagePath = (
+    dataDir / "GlyphsUnitTestSans3.glyphs"
+)  # "GlyphsUnitTestSans3.glyphspackage"  # ignore package for now.
 referenceFontPath = dataDir / "GlyphsUnitTestSans3.fontra"
 
 
@@ -111,6 +113,32 @@ async def test_getGlyph(testFont, referenceFont, glyphName):
         # glyphsLib doesn't read the color attr from Glyphs-2 files,
         # so let's monkeypatch the data
         glyph.customData = {"com.glyphsapp.glyph-color": [120, 220, 20, 4]}
+
+    referenceGlyph = await referenceFont.getGlyph(glyphName)
+    assert referenceGlyph == glyph
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("glyphName", list(expectedGlyphMap))
+async def test_putGlyph(testFont, referenceFont, glyphName):
+    glyphMap = await testFont.getGlyphMap()
+    glyph = await testFont.getGlyph(glyphName)
+    if glyphName == "A" and "com.glyphsapp.glyph-color" not in glyph.customData:
+        # glyphsLib doesn't read the color attr from Glyphs-2 files,
+        # so let's monkeypatch the data
+        glyph.customData = {"com.glyphsapp.glyph-color": [120, 220, 20, 4]}
+
+    # # for testing change every coordinate by 10 units
+    # for (layerName, layer) in iter(glyph.layers.items()):
+    #     for i, coordinate in enumerate(layer.glyph.path.coordinates):
+    #         layer.glyph.path.coordinates[i] = coordinate + 10
+
+    # for testing change xAdvance
+    for layerName, layer in iter(glyph.layers.items()):
+        for i, coordinate in enumerate(layer.glyph.path.coordinates):
+            layer.glyph.xAdvance = 500
+
+    await testFont.putGlyph(glyphName, glyph, glyphMap[glyphName])
 
     referenceGlyph = await referenceFont.getGlyph(glyphName)
     assert referenceGlyph == glyph

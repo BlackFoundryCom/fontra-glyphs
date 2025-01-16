@@ -1,4 +1,5 @@
 import pathlib
+import re
 from collections import defaultdict
 from os import PathLike
 from typing import Any
@@ -89,6 +90,7 @@ class GlyphsBackend:
 
     def _setupFromPath(self, path: PathLike) -> None:
         gsFont = glyphsLib.classes.GSFont()
+        self.gsFilePath = path
 
         rawFontData, rawGlyphsData = self._loadFiles(path)
 
@@ -101,6 +103,7 @@ class GlyphsBackend:
         self.gsFont.glyphs = [
             glyphsLib.classes.GSGlyph() for i in range(len(rawGlyphsData))
         ]
+        self.rawFontData = rawFontData
         self.rawGlyphsData = rawGlyphsData
 
         self.glyphNameToIndex = {
@@ -331,7 +334,7 @@ class GlyphsBackend:
 
         glyphIndex = self.glyphNameToIndex[glyphName]
         rawGlyphData = self.rawGlyphsData[glyphIndex]
-        self.rawGlyphsData[glyphIndex] = None
+        # self.rawGlyphsData[glyphIndex] = None
         self.parsedGlyphNames.add(glyphName)
 
         gsGlyph = glyphsLib.classes.GSGlyph()
@@ -377,8 +380,67 @@ class GlyphsBackend:
     async def putGlyph(
         self, glyphName: str, glyph: VariableGlyph, codePoints: list[int]
     ) -> None:
-        print("GlyphsBackend putGlyph: ", glyphName, glyph, codePoints)
-        pass
+        # NOTE:
+        # Just said: Compare with the fontra backend and the designspace backend,
+        # see how they implement writing glyphs.
+        # 1. option: similar to fontra backend
+        # 2. option: similar to designspace backend
+
+        # 1. option:
+        # Convert the fontra glyph and replace the glyph in the rawGlyphsData and
+        # save it via openstep_plist.dump().
+        # 1. issue: How to convert the fontra glyph without losing too much data?
+        # 2. issue: How do we handle GlyphsApp packages?
+        # 3. issue: The formatting of openstep_plist.dump() is totally different to how a
+        # .glyphs file usually looks like.
+        # 4. issue: Glyphs 3 and 2 may look different. Do we have to support that? And if so,
+        # how would it look like?
+
+        layerMap = {}
+        for layerIndex, (layerName, layer) in enumerate(iter(glyph.layers.items())):
+            # For now only do glyph width and assume the layer order is the same.
+            # (better would be based on layerId not on index).
+            layerMap[layerIndex] = {
+                "anchors": [],
+                "shapes": [],
+                "width": layer.glyph.xAdvance,
+            }
+
+            # # TODO: associatedMasterId, attr, background, layerId, name, width
+            # for i, contour in enumerate(layer.glyph.path.unpackedContours()):
+            #     # make a rawShape based on our fontra glyph
+            #     shape = {"closed": 1 if contour["isClosed"] else 0, "nodes": []}
+
+            #     for j, point in enumerate(contour["points"]):
+            #         pointType = "l"  # TODO: fontraPointTypeToGsNodeType(point.get("type"))
+            #         shape["nodes"].append([point["x"], point["y"], pointType])
+
+            #     layerMap[layerIndex]["shapes"].append(shape)
+
+        glyphIndex = self.glyphNameToIndex[glyphName]
+        rawGlyphData = self.rawGlyphsData[glyphIndex]
+
+        for i, rawLayer in enumerate(rawGlyphData["layers"]):
+            rawLayer["width"] = layerMap[i]["width"]
+
+        self.rawGlyphsData[glyphIndex] = rawGlyphData
+        self.rawFontData["glyphs"] = self.rawGlyphsData
+
+        with open(self.gsFilePath, "w", encoding="utf-8") as fp:
+            openstep_plist.dump(self.rawFontData, fp)
+
+        saveFileWithGsFormatting(self.gsFilePath)
+
+        # # 2. option:
+        # # Similar to designspace backend: Instead of using fonttools for writing UFO
+        # # use glyphsLib for writing to a GlyphsApp file
+
+        # gsGlyph = self.gsFont.glyphs[glyphName]
+        # for layerIndex, (layerName, layer) in enumerate(iter(glyph.layers.items())):
+        #     gsLayer = gsGlyph.layers[layerIndex]
+        #     gsLayer.width = layer.glyph.xAdvance
+
+        # self.gsFont.save(self.gsFilePath)
 
     async def aclose(self) -> None:
         pass
@@ -690,3 +752,43 @@ def gsVerticalMetricsToFontraLineMetricsHorizontal(gsFont, gsMaster):
     #         )
 
     return lineMetricsHorizontal
+
+
+def saveFileWithGsFormatting(gsFilePath):
+    # openstep_plist.dump changes the whole formatting, therefore
+    # it's very diffucute to see what has changed.
+    # This function is a very bad try to get close to how the formatting
+    # looks like for a .glyphs file.
+    # There must be a better solution, but this is better than nothing.
+    with open(gsFilePath, "r", encoding="utf-8") as file:
+        content = file.read()
+
+    content = content.replace(", ", ",")
+    content = content.replace("{", "{\n")
+    content = content.replace(";", ";\n")
+    content = content.replace("(", "(\n")
+    content = content.replace(",", ",\n")
+    content = content.replace(")", "\n)")
+
+    content = re.sub(r"\(\s*(\d+),\s*(\d+),\s*([a-zA-Z])\s*\)", r"(\1,\2,\3)", content)
+
+    content = re.sub(
+        r"\(\s*(\d+),\s*(-?\d+),\s*([a-zA-Z]+)\s*\)", r"(\1,\2,\3)", content
+    )
+    content = re.sub(
+        r"\{\s*(\d+),\s*(-?\d+),\s*([a-zA-Z]+)\s*\}", r"{\1, \2, \3}", content
+    )
+
+    content = re.sub(r"\(\s*([\d.]+),\s*([\d.]+)\s*\)", r"(\1,\2)", content)
+    content = re.sub(r"\{\s*([\d.]+),\s*([\d.]+)\s*\}", r"{\1,\2}", content)
+
+    content = re.sub(
+        r"\{\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\s*\}",
+        r"{\1, \2, \3, \4}",
+        content,
+    )
+
+    content = "\n".join(line.strip() for line in content.splitlines())
+
+    with open(gsFilePath, "w", encoding="utf-8") as file:
+        file.write(content)
