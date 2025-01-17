@@ -381,20 +381,21 @@ class GlyphsBackend:
         self, glyphName: str, glyph: VariableGlyph, codePoints: list[int]
     ) -> None:
         # NOTE:
-        # Just said: Compare with the fontra backend and the designspace backend,
-        # see how they implement writing glyphs.
-        # 1. option: similar to fontra backend
-        # 2. option: similar to designspace backend
+        # Reading a glyph from .glyphs(package)
 
-        # 1. option:
-        # Convert the fontra glyph and replace the glyph in the rawGlyphsData and
-        # save it via openstep_plist.dump().
-        # 1. issue: How to convert the fontra glyph without losing too much data?
-        # 2. issue: How do we handle GlyphsApp packages?
-        # 3. issue: The formatting of openstep_plist.dump() is totally different to how a
-        # .glyphs file usually looks like.
-        # 4. issue: Glyphs 3 and 2 may look different. Do we have to support that? And if so,
-        # how would it look like?
+        # 1. parse the source text into a "raw" object
+        # 2. turn the "raw" object into a GSGlyph instance
+        # 3. convert GSGlyph to VariableGlyph
+
+        # Writing a glyph to .glyphs(package)
+
+        # 1. convert VariableGlyph to GSGlyph (but start with a copy of the original)
+        # 2. serialize to text with glyphsLib.writer.Writer(), using io.StringIO or io.BytesIO
+        # 3. parse stream into "raw" object
+        # 4. replace original "raw" object with new "raw" object
+        # 5. write whole file with openstep_plist
+
+        # _writeRawGlyph(glyphName, rawGlyph)
 
         layerMap = {}
         for layerIndex, (layerName, layer) in enumerate(iter(glyph.layers.items())):
@@ -427,20 +428,16 @@ class GlyphsBackend:
         self.rawFontData["glyphs"] = self.rawGlyphsData
 
         with open(self.gsFilePath, "w", encoding="utf-8") as fp:
-            openstep_plist.dump(self.rawFontData, fp)
+            openstep_plist.dump(
+                self.rawFontData,
+                fp,
+                unicode_escape=False,
+                indent=0,
+                single_line_tuples=True,
+                escape_newlines=False,
+            )
 
         saveFileWithGsFormatting(self.gsFilePath)
-
-        # # 2. option:
-        # # Similar to designspace backend: Instead of using fonttools for writing UFO
-        # # use glyphsLib for writing to a GlyphsApp file
-
-        # gsGlyph = self.gsFont.glyphs[glyphName]
-        # for layerIndex, (layerName, layer) in enumerate(iter(glyph.layers.items())):
-        #     gsLayer = gsGlyph.layers[layerIndex]
-        #     gsLayer.width = layer.glyph.xAdvance
-
-        # self.gsFont.save(self.gsFilePath)
 
     async def aclose(self) -> None:
         pass
@@ -763,32 +760,33 @@ def saveFileWithGsFormatting(gsFilePath):
     with open(gsFilePath, "r", encoding="utf-8") as file:
         content = file.read()
 
-    content = content.replace(", ", ",")
-    content = content.replace("{", "{\n")
-    content = content.replace(";", ";\n")
-    content = content.replace("(", "(\n")
-    content = content.replace(",", ",\n")
-    content = content.replace(")", "\n)")
-
-    content = re.sub(r"\(\s*(\d+),\s*(\d+),\s*([a-zA-Z])\s*\)", r"(\1,\2,\3)", content)
+    content = re.sub(r"pos = \(\s*(-?\d+),\s*(-?\d+)\s*\);", r"pos = (\1,\2);", content)
 
     content = re.sub(
-        r"\(\s*(\d+),\s*(-?\d+),\s*([a-zA-Z]+)\s*\)", r"(\1,\2,\3)", content
-    )
-    content = re.sub(
-        r"\{\s*(\d+),\s*(-?\d+),\s*([a-zA-Z]+)\s*\}", r"{\1, \2, \3}", content
+        r"pos = \(\s*([\d.]+),\s*([\d.]+)\s*\);", r"pos = (\1,\2);", content
     )
 
-    content = re.sub(r"\(\s*([\d.]+),\s*([\d.]+)\s*\)", r"(\1,\2)", content)
-    content = re.sub(r"\{\s*([\d.]+),\s*([\d.]+)\s*\}", r"{\1,\2}", content)
+    content = re.sub(
+        r"\(\s*([\d.]+),\s*(-?\d+),\s*([a-zA-Z])\s*\)", r"(\1,\2,\3)", content
+    )
 
     content = re.sub(
-        r"\{\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\s*\}",
-        r"{\1, \2, \3, \4}",
+        r"origin = \(\s*(-?\d+),\s*(-?\d+)\s*\);", r"origin = (\1,\2);", content
+    )
+
+    content = re.sub(
+        r"target = \(\s*(-?\d+),\s*(-?\d+)\s*\);", r"target = (\1,\2);", content
+    )
+
+    content = re.sub(
+        r"color = \(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\s*\);",
+        r"color = (\1,\2,\3,\4);",
         content,
     )
 
-    content = "\n".join(line.strip() for line in content.splitlines())
+    content = re.sub(
+        r"\(\s*(-?\d+),\s*(-?\d+),\s*([a-zA-Z]+)\s*\)", r"(\1,\2,\3)", content
+    )
 
     with open(gsFilePath, "w", encoding="utf-8") as file:
         file.write(content)
