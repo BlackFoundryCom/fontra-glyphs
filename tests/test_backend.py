@@ -8,9 +8,7 @@ dataDir = pathlib.Path(__file__).resolve().parent / "data"
 
 glyphs2Path = dataDir / "GlyphsUnitTestSans.glyphs"
 glyphs3Path = dataDir / "GlyphsUnitTestSans3.glyphs"
-glyphsPackagePath = (
-    dataDir / "GlyphsUnitTestSans3.glyphs"
-)  # "GlyphsUnitTestSans3.glyphspackage"  # ignore package for now.
+glyphsPackagePath = dataDir / "GlyphsUnitTestSans3.glyphspackage"
 referenceFontPath = dataDir / "GlyphsUnitTestSans3.fontra"
 
 
@@ -135,8 +133,7 @@ async def test_putGlyph(testFont, referenceFont, glyphName):
 
     # for testing change xAdvance
     for layerName, layer in iter(glyph.layers.items()):
-        for i, coordinate in enumerate(layer.glyph.path.coordinates):
-            layer.glyph.xAdvance = 500
+        layer.glyph.xAdvance = 500
 
     await testFont.putGlyph(glyphName, glyph, glyphMap[glyphName])
 

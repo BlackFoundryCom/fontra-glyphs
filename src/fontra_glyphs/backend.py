@@ -1,6 +1,8 @@
+import io
 import pathlib
 import re
 from collections import defaultdict
+from copy import deepcopy
 from os import PathLike
 from typing import Any
 
@@ -380,53 +382,28 @@ class GlyphsBackend:
     async def putGlyph(
         self, glyphName: str, glyph: VariableGlyph, codePoints: list[int]
     ) -> None:
-        # NOTE:
-        # Reading a glyph from .glyphs(package)
-
-        # 1. parse the source text into a "raw" object
-        # 2. turn the "raw" object into a GSGlyph instance
-        # 3. convert GSGlyph to VariableGlyph
-
-        # Writing a glyph to .glyphs(package)
-
         # 1. convert VariableGlyph to GSGlyph (but start with a copy of the original)
+        gsGlyphNew = deepcopy(self.gsFont.glyphs[glyphName])
+
         # 2. serialize to text with glyphsLib.writer.Writer(), using io.StringIO or io.BytesIO
+        f = io.StringIO()
+        writer = glyphsLib.writer.Writer(f)
+        writer.format_version = self.gsFont.format_version
+        writer.write(gsGlyphNew)
+
         # 3. parse stream into "raw" object
+        f.seek(0)
+        rawGlyphData = openstep_plist.load(f, use_numbers=True)
+
+        self._writeRawGlyph(glyphName, rawGlyphData)
+
+    def _writeRawGlyph(self, glyphName, rawGlyphData):
         # 4. replace original "raw" object with new "raw" object
-        # 5. write whole file with openstep_plist
-
-        # _writeRawGlyph(glyphName, rawGlyph)
-
-        layerMap = {}
-        for layerIndex, (layerName, layer) in enumerate(iter(glyph.layers.items())):
-            # For now only do glyph width and assume the layer order is the same.
-            # (better would be based on layerId not on index).
-            layerMap[layerIndex] = {
-                "anchors": [],
-                "shapes": [],
-                "width": layer.glyph.xAdvance,
-            }
-
-            # # TODO: associatedMasterId, attr, background, layerId, name, width
-            # for i, contour in enumerate(layer.glyph.path.unpackedContours()):
-            #     # make a rawShape based on our fontra glyph
-            #     shape = {"closed": 1 if contour["isClosed"] else 0, "nodes": []}
-
-            #     for j, point in enumerate(contour["points"]):
-            #         pointType = "l"  # TODO: fontraPointTypeToGsNodeType(point.get("type"))
-            #         shape["nodes"].append([point["x"], point["y"], pointType])
-
-            #     layerMap[layerIndex]["shapes"].append(shape)
-
         glyphIndex = self.glyphNameToIndex[glyphName]
-        rawGlyphData = self.rawGlyphsData[glyphIndex]
-
-        for i, rawLayer in enumerate(rawGlyphData["layers"]):
-            rawLayer["width"] = layerMap[i]["width"]
-
         self.rawGlyphsData[glyphIndex] = rawGlyphData
         self.rawFontData["glyphs"] = self.rawGlyphsData
 
+        # 5. write whole file with openstep_plist
         with open(self.gsFilePath, "w", encoding="utf-8") as fp:
             openstep_plist.dump(
                 self.rawFontData,
@@ -437,6 +414,7 @@ class GlyphsBackend:
                 escape_newlines=False,
             )
 
+        # 6. fix formatting
         saveFileWithGsFormatting(self.gsFilePath)
 
     async def aclose(self) -> None:
@@ -479,6 +457,24 @@ class GlyphsPackageBackend(GlyphsBackend):
         rawGlyphsData.sort(key=sortKey)
 
         return rawFontData, rawGlyphsData
+
+    def _writeRawGlyph(self, glyphName, rawGlyphData):
+        glyphsPath = pathlib.Path(self.gsFilePath) / "glyphs"
+
+        # 5. write glyh specific file with openstep_plist
+        glyphPath = f"{glyphsPath}/{glyphName}.glyph"
+        with open(glyphPath, "w", encoding="utf-8") as fp:
+            openstep_plist.dump(
+                rawGlyphData,
+                fp,
+                unicode_escape=False,
+                indent=0,
+                single_line_tuples=True,
+                escape_newlines=False,
+            )
+
+        # 6. fix formatting
+        saveFileWithGsFormatting(glyphPath)
 
 
 def _readGlyphMapAndKerningGroups(
