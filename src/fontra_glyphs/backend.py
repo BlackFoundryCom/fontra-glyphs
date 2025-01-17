@@ -462,7 +462,10 @@ class GlyphsPackageBackend(GlyphsBackend):
         glyphsPath = pathlib.Path(self.gsFilePath) / "glyphs"
 
         # 5. write glyh specific file with openstep_plist
-        glyphPath = f"{glyphsPath}/{glyphName}.glyph"
+        # TODO: Get the right glyph file name will be challenging,
+        # because for example the glyph A-cy is stored in the package as A_-cy.glyph
+        realGlyphName = getGlyphspackageGlyphFileName(glyphName)
+        glyphPath = f"{glyphsPath}/{realGlyphName}.glyph"
         with open(glyphPath, "w", encoding="utf-8") as fp:
             openstep_plist.dump(
                 rawGlyphData,
@@ -475,6 +478,18 @@ class GlyphsPackageBackend(GlyphsBackend):
 
         # 6. fix formatting
         saveFileWithGsFormatting(glyphPath)
+
+
+def getGlyphspackageGlyphFileName(glyphName):
+    nameParts = glyphName.split("-")
+    firstPart = (
+        f"{nameParts[0]}_"
+        if len(nameParts[0]) == 1 and nameParts[0].isupper()
+        else nameParts[0]
+    )
+    nameParts[0] = firstPart
+
+    return "-".join(nameParts)
 
 
 def _readGlyphMapAndKerningGroups(
@@ -783,6 +798,18 @@ def saveFileWithGsFormatting(gsFilePath):
     content = re.sub(
         r"\(\s*(-?\d+),\s*(-?\d+),\s*([a-zA-Z]+)\s*\)", r"(\1,\2,\3)", content
     )
+
+    content = re.sub(
+        r"\(\s*(-?\d+),\s*(-?\d+),\s*([a-zA-Z]),\s*\{", r"(\1,\2,\3,{", content
+    )
+
+    content = re.sub(
+        r"\(\s*(-?\d+),\s*(-?\d+),\s*([a-zA-Z]+),\s*\{", r"(\1,\2,\3,{", content
+    )
+
+    content = re.sub(r"\}\s*\),", r"}),", content)
+
+    content += "\n"  # add blank break at the end of the file.
 
     with open(gsFilePath, "w", encoding="utf-8") as file:
         file.write(content)
