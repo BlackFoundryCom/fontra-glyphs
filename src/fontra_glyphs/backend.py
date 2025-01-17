@@ -383,7 +383,9 @@ class GlyphsBackend:
         self, glyphName: str, glyph: VariableGlyph, codePoints: list[int]
     ) -> None:
         # 1. convert VariableGlyph to GSGlyph (but start with a copy of the original)
-        gsGlyphNew = deepcopy(self.gsFont.glyphs[glyphName])
+        gsGlyphNew = variableGlyphToGsGlyph(
+            glyph, deepcopy(self.gsFont.glyphs[glyphName])
+        )
 
         # 2. serialize to text with glyphsLib.writer.Writer(), using io.StringIO or io.BytesIO
         f = io.StringIO()
@@ -391,11 +393,52 @@ class GlyphsBackend:
         writer.format_version = self.gsFont.format_version
         writer.write(gsGlyphNew)
 
-        # 3. parse stream into "raw" object
-        f.seek(0)
-        rawGlyphData = openstep_plist.load(f, use_numbers=True)
+        # # 3. parse stream into "raw" object
+        # f.seek(0)
+        # rawGlyphData = openstep_plist.load(f, use_numbers=True)
 
-        self._writeRawGlyph(glyphName, rawGlyphData)
+        # self._writeRawGlyph(glyphName, rawGlyphData)
+
+        self._findAndReplaceGlyph(glyphName, f)
+
+    def _findAndReplaceGlyph(self, glyphName, f):
+        glyphChunkIndicator = f"glyphname = {glyphName};"
+
+        # find glyph chunk
+        glyphChunkStart = None
+        glyphChunkEnd = None
+
+        with open(self.gsFilePath, "r", encoding="utf-8") as fp:
+            lines = fp.readlines()
+            for i, line in enumerate(lines):
+                if glyphChunkIndicator in line:
+                    for j in range(i, 0, -1):
+                        if "{" in lines[j]:
+                            glyphChunkStart = j
+                            break
+
+                    braceLeftCount = 1
+                    for k in range(i, len(lines)):
+                        if "{" in lines[k]:
+                            braceLeftCount += 1
+                        if "}" in lines[k]:
+                            braceLeftCount -= 1
+                        if "}" in lines[k] and braceLeftCount == 0:
+                            glyphChunkEnd = k
+                            break
+                    break
+
+            if glyphChunkStart is None or glyphChunkEnd is None:
+                # If not found, maybe add as a new glyph at the end of the glyphs list.
+                print("ERROR: Could not find glyph: ", glyphChunkIndicator)
+                return
+
+            rawGlyphAsText = f.getvalue()
+            newLines = (
+                lines[:glyphChunkStart] + [rawGlyphAsText[:-2]] + lines[glyphChunkEnd:]
+            )
+            with open(self.gsFilePath, "w", encoding="utf-8") as fp:
+                fp.writelines(newLines)
 
     def _writeRawGlyph(self, glyphName, rawGlyphData):
         # 4. replace original "raw" object with new "raw" object
@@ -459,14 +502,9 @@ class GlyphsPackageBackend(GlyphsBackend):
         return rawFontData, rawGlyphsData
 
     def _writeRawGlyph(self, glyphName, rawGlyphData):
-        glyphsPath = pathlib.Path(self.gsFilePath) / "glyphs"
-
         # 5. write glyh specific file with openstep_plist
-        # TODO: Get the right glyph file name will be challenging,
-        # because for example the glyph A-cy is stored in the package as A_-cy.glyph
-        realGlyphName = getGlyphspackageGlyphFileName(glyphName)
-        glyphPath = f"{glyphsPath}/{realGlyphName}.glyph"
-        with open(glyphPath, "w", encoding="utf-8") as fp:
+        filePath = self.getGlyphFilePath(glyphName)
+        with open(filePath, "w", encoding="utf-8") as fp:
             openstep_plist.dump(
                 rawGlyphData,
                 fp,
@@ -477,7 +515,18 @@ class GlyphsPackageBackend(GlyphsBackend):
             )
 
         # 6. fix formatting
-        saveFileWithGsFormatting(glyphPath)
+        saveFileWithGsFormatting(filePath)
+
+    def _findAndReplaceGlyph(self, glyphName, f):
+        filePath = self.getGlyphFilePath(glyphName)
+        filePath.write_text(f.getvalue(), encoding="utf=8")
+
+    def getGlyphFilePath(self, glyphName):
+        glyphsPath = pathlib.Path(self.gsFilePath) / "glyphs"
+        # TODO: Get the right glyph file name might be challenging,
+        # because for example the glyph A-cy is stored in the package as A_-cy.glyph
+        realGlyphName = getGlyphspackageGlyphFileName(glyphName)
+        return glyphsPath / (realGlyphName + ".glyph")
 
 
 def getGlyphspackageGlyphFileName(glyphName):
@@ -762,6 +811,7 @@ def gsVerticalMetricsToFontraLineMetricsHorizontal(gsFont, gsMaster):
     return lineMetricsHorizontal
 
 
+# The following should be obsolte with _findAndReplaceGlyph
 def saveFileWithGsFormatting(gsFilePath):
     # openstep_plist.dump changes the whole formatting, therefore
     # it's very diffucute to see what has changed.
@@ -813,3 +863,10 @@ def saveFileWithGsFormatting(gsFilePath):
 
     with open(gsFilePath, "w", encoding="utf-8") as file:
         file.write(content)
+
+
+def variableGlyphToGsGlyph(variableGlyph, gsGlyph):
+    # TODO: convert fontra variableGlyph to GlyphsApp glyph
+    gsGlyph.name = f"{variableGlyph.name}.changed"
+
+    return gsGlyph
