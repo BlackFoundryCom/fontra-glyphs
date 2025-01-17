@@ -1,7 +1,7 @@
 import io
 import pathlib
 import re
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from copy import deepcopy
 from os import PathLike
 from typing import Any
@@ -105,8 +105,8 @@ class GlyphsBackend:
         self.gsFont.glyphs = [
             glyphsLib.classes.GSGlyph() for i in range(len(rawGlyphsData))
         ]
-        self.rawFontData = rawFontData
-        self.rawGlyphsData = rawGlyphsData
+        self.rawFontData = toOrderedDict(rawFontData)
+        self.rawGlyphsData = toOrderedDict(rawGlyphsData)
 
         self.glyphNameToIndex = {
             glyphData["glyphname"]: i for i, glyphData in enumerate(rawGlyphsData)
@@ -393,13 +393,13 @@ class GlyphsBackend:
         writer.format_version = self.gsFont.format_version
         writer.write(gsGlyphNew)
 
-        # # 3. parse stream into "raw" object
-        # f.seek(0)
-        # rawGlyphData = openstep_plist.load(f, use_numbers=True)
+        # 3. parse stream into "raw" object
+        f.seek(0)
+        rawGlyphData = openstep_plist.load(f, use_numbers=True)
 
-        # self._writeRawGlyph(glyphName, rawGlyphData)
+        self._writeRawGlyph(glyphName, rawGlyphData)
 
-        self._findAndReplaceGlyph(glyphName, f)
+        # self._findAndReplaceGlyph(glyphName, f)
 
     def _findAndReplaceGlyph(self, glyphName, f):
         glyphChunkIndicator = f"glyphname = {glyphName};"
@@ -811,7 +811,7 @@ def gsVerticalMetricsToFontraLineMetricsHorizontal(gsFont, gsMaster):
     return lineMetricsHorizontal
 
 
-# The following should be obsolte with _findAndReplaceGlyph
+# The following should be obsolete with _findAndReplaceGlyph
 def saveFileWithGsFormatting(gsFilePath):
     # openstep_plist.dump changes the whole formatting, therefore
     # it's very diffucute to see what has changed.
@@ -870,3 +870,12 @@ def variableGlyphToGsGlyph(variableGlyph, gsGlyph):
     gsGlyph.name = f"{variableGlyph.name}.changed"
 
     return gsGlyph
+
+
+def toOrderedDict(obj):
+    if isinstance(obj, dict):
+        return OrderedDict({k: toOrderedDict(v) for k, v in obj.items()})
+    elif isinstance(obj, list):
+        return [toOrderedDict(item) for item in obj]
+    else:
+        return obj
