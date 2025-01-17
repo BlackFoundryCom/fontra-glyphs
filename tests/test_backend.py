@@ -127,10 +127,10 @@ async def test_putGlyph(testFont, referenceFont, glyphName):
         # so let's monkeypatch the data
         glyph.customData = {"com.glyphsapp.glyph-color": [120, 220, 20, 4]}
 
-    # # for testing change every coordinate by 10 units
-    # for (layerName, layer) in iter(glyph.layers.items()):
-    #     for i, coordinate in enumerate(layer.glyph.path.coordinates):
-    #         layer.glyph.path.coordinates[i] = coordinate + 10
+    # for testing change every coordinate by 10 units
+    for layerName, layer in iter(glyph.layers.items()):
+        for i, coordinate in enumerate(layer.glyph.path.coordinates):
+            layer.glyph.path.coordinates[i] = coordinate + 10
 
     # for testing change xAdvance
     for layerName, layer in iter(glyph.layers.items()):
