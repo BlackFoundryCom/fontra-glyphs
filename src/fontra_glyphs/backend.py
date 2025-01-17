@@ -393,54 +393,13 @@ class GlyphsBackend:
         writer.format_version = self.gsFont.format_version
         writer.write(gsGlyphNew)
 
+        self._writeRawGlyph(glyphName, f)
+
+    def _writeRawGlyph(self, glyphName, f):
         # 3. parse stream into "raw" object
         f.seek(0)
         rawGlyphData = openstep_plist.load(f, use_numbers=True)
 
-        self._writeRawGlyph(glyphName, rawGlyphData)
-
-        # self._findAndReplaceGlyph(glyphName, f)
-
-    def _findAndReplaceGlyph(self, glyphName, f):
-        glyphChunkIndicator = f"glyphname = {glyphName};"
-
-        # find glyph chunk
-        glyphChunkStart = None
-        glyphChunkEnd = None
-
-        with open(self.gsFilePath, "r", encoding="utf-8") as fp:
-            lines = fp.readlines()
-            for i, line in enumerate(lines):
-                if glyphChunkIndicator in line:
-                    for j in range(i, 0, -1):
-                        if "{" in lines[j]:
-                            glyphChunkStart = j
-                            break
-
-                    braceLeftCount = 1
-                    for k in range(i, len(lines)):
-                        if "{" in lines[k]:
-                            braceLeftCount += 1
-                        if "}" in lines[k]:
-                            braceLeftCount -= 1
-                        if "}" in lines[k] and braceLeftCount == 0:
-                            glyphChunkEnd = k
-                            break
-                    break
-
-            if glyphChunkStart is None or glyphChunkEnd is None:
-                # If not found, maybe add as a new glyph at the end of the glyphs list.
-                print("ERROR: Could not find glyph: ", glyphChunkIndicator)
-                return
-
-            rawGlyphAsText = f.getvalue()
-            newLines = (
-                lines[:glyphChunkStart] + [rawGlyphAsText[:-2]] + lines[glyphChunkEnd:]
-            )
-            with open(self.gsFilePath, "w", encoding="utf-8") as fp:
-                fp.writelines(newLines)
-
-    def _writeRawGlyph(self, glyphName, rawGlyphData):
         # 4. replace original "raw" object with new "raw" object
         glyphIndex = self.glyphNameToIndex[glyphName]
         self.rawGlyphsData[glyphIndex] = rawGlyphData
@@ -501,23 +460,7 @@ class GlyphsPackageBackend(GlyphsBackend):
 
         return rawFontData, rawGlyphsData
 
-    def _writeRawGlyph(self, glyphName, rawGlyphData):
-        # 5. write glyh specific file with openstep_plist
-        filePath = self.getGlyphFilePath(glyphName)
-        with open(filePath, "w", encoding="utf-8") as fp:
-            openstep_plist.dump(
-                rawGlyphData,
-                fp,
-                unicode_escape=False,
-                indent=0,
-                single_line_tuples=True,
-                escape_newlines=False,
-            )
-
-        # 6. fix formatting
-        saveFileWithGsFormatting(filePath)
-
-    def _findAndReplaceGlyph(self, glyphName, f):
+    def _writeRawGlyph(self, glyphName, f):
         filePath = self.getGlyphFilePath(glyphName)
         filePath.write_text(f.getvalue(), encoding="utf=8")
 
@@ -811,7 +754,6 @@ def gsVerticalMetricsToFontraLineMetricsHorizontal(gsFont, gsMaster):
     return lineMetricsHorizontal
 
 
-# The following should be obsolete with _findAndReplaceGlyph
 def saveFileWithGsFormatting(gsFilePath):
     # openstep_plist.dump changes the whole formatting, therefore
     # it's very diffucute to see what has changed.
