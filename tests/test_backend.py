@@ -4,7 +4,14 @@ import shutil
 
 import pytest
 from fontra.backends import getFileSystemBackend
-from fontra.core.classes import Axes, FontInfo, structure
+from fontra.core.classes import (
+    Axes,
+    FontInfo,
+    GlyphSource,
+    Layer,
+    StaticGlyph,
+    structure,
+)
 
 dataDir = pathlib.Path(__file__).resolve().parent / "data"
 
@@ -176,6 +183,24 @@ async def test_deleteLayer(writableTestFont):
     savedGlyph = await writableTestFont.getGlyph(glyphName)
 
     assert layerName not in savedGlyph.layers
+
+
+async def test_addLayer(writableTestFont):
+    glyphName = "a"
+    glyphMap = await writableTestFont.getGlyphMap()
+    glyph = await writableTestFont.getGlyph(glyphName)
+    numGlyphLayers = len(glyph.layers)
+
+    glyph.sources.append(
+        GlyphSource(name="{166, 100}", location={"weight": 166}, layerName="{166, 100}")
+    )
+    glyph.layers["{166, 100}"] = Layer(glyph=StaticGlyph())
+
+    await writableTestFont.putGlyph(glyphName, glyph, glyphMap[glyphName])
+
+    savedGlyph = await writableTestFont.getGlyph(glyphName)
+    # TODO: we don't have a associated master concept with fontra.
+    assert len(savedGlyph.layers.keys()) > numGlyphLayers
 
 
 async def test_getKerning(testFont, referenceFont):
