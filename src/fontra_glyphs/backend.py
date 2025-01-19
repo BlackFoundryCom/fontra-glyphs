@@ -383,7 +383,7 @@ class GlyphsBackend:
         self, glyphName: str, glyph: VariableGlyph, codePoints: list[int]
     ) -> None:
         # 1. convert VariableGlyph to GSGlyph (but start with a copy of the original)
-        gsGlyphNew = variableGlyphToGsGlyph(
+        gsGlyphNew = variableGlyphToGSGlyph(
             glyph, deepcopy(self.gsFont.glyphs[glyphName])
         )
 
@@ -808,27 +808,35 @@ def saveFileWithGsFormatting(gsFilePath):
 
 
 def fontraLayerToGSLayer(layer, gsLayer):
-    gsLayer.width = layer.glyph.xAdvance
-
     # Draw new paths with pen
     gsLayer.paths = []  # first: remove all paths
     pen = gsLayer.getPointPen()
     layer.glyph.path.drawPoints(pen)
 
     gsLayer.drawPoints(pen)
+    gsLayer.width = layer.glyph.xAdvance
+    # gsLayer.components = components  # https://docu.glyphsapp.com/#GSLayer.components
+    # gsLayer.anchors = anchors  # https://docu.glyphsapp.com/#GSLayer.anchors
 
-    # TODO: anchors, components, etc.
 
-
-def variableGlyphToGsGlyph(variableGlyph, gsGlyph):
+def variableGlyphToGSGlyph(variableGlyph, gsGlyph):
     # TODO: convert fontra variableGlyph to GlyphsApp glyph
 
     for i, (layerName, layer) in enumerate(iter(variableGlyph.layers.items())):
         fontraLayerToGSLayer(layer, gsGlyph.layers[i])
 
+    # What happens, if the number of layers differ from the original number?
+    # How do we handle intermediate layers?
+    # https://docu.glyphsapp.com/#GSGlyph.layers font.glyphs['a'].layers.append(newLayer)
+    # How do we handle missing masters?
+    # It might be that someone deletes a not needed layer, which works for fontra,
+    # but is required for Glyphs. We would need to get the intermediate contours.
+
     return gsGlyph
 
 
+# The following is obsolete once this is merged:
+# https://github.com/fonttools/openstep-plist/pull/35
 def toOrderedDict(obj):
     if isinstance(obj, dict):
         return OrderedDict({k: toOrderedDict(v) for k, v in obj.items()})
