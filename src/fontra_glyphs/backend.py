@@ -285,7 +285,7 @@ class GlyphsBackend:
         gsLayers = sorted(
             gsLayers, key=lambda i_gsLayer: masterOrder[i_gsLayer[1].associatedMasterId]
         )
-
+        layerIdsMapping = {}
         seenLocations = []
         for i, gsLayer in gsLayers:
             braceLocation = self._getBraceLayerLocation(gsLayer)
@@ -296,6 +296,7 @@ class GlyphsBackend:
             else:
                 sourceName = gsLayer.name or masterName
             layerName = f"{sourceName} (layer #{i})"
+            layerIdsMapping[layerName] = gsLayer.layerId
 
             location = {
                 **self.locationByMasterID[gsLayer.associatedMasterId],
@@ -319,6 +320,7 @@ class GlyphsBackend:
             )
             layers[layerName] = gsLayerToFontraLayer(gsLayer, self.axisNames)
 
+        customData["com.glyphsapp.layerIdsMapping"] = layerIdsMapping
         fixSourceLocations(sources, set(smartLocation))
 
         glyph = VariableGlyph(
@@ -825,9 +827,9 @@ def fontraLayerToGSLayer(layer, gsLayer):
 
 def variableGlyphToGSGlyph(variableGlyph, gsGlyph):
     # TODO: convert fontra variableGlyph to GlyphsApp glyph
-
-    for i, (layerName, layer) in enumerate(iter(variableGlyph.layers.items())):
-        fontraLayerToGSLayer(layer, gsGlyph.layers[i])
+    layerIdsMapping = variableGlyph.customData["com.glyphsapp.layerIdsMapping"]
+    for layerName, gsLayerId in layerIdsMapping.items():
+        fontraLayerToGSLayer(variableGlyph.layers[layerName], gsGlyph.layers[gsLayerId])
 
     # What happens, if the number of layers differ from the original number?
     # How do we handle intermediate layers?

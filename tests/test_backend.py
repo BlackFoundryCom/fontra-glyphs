@@ -124,9 +124,13 @@ async def test_getGlyph(testFont, referenceFont, glyphName):
     if glyphName == "A" and "com.glyphsapp.glyph-color" not in glyph.customData:
         # glyphsLib doesn't read the color attr from Glyphs-2 files,
         # so let's monkeypatch the data
-        glyph.customData = {"com.glyphsapp.glyph-color": [120, 220, 20, 4]}
+        glyph.customData["com.glyphsapp.glyph-color"] = [120, 220, 20, 4]
 
     referenceGlyph = await referenceFont.getGlyph(glyphName)
+    # TODO: This unit test fails currently, because the fontra referenceFont
+    # does not contain the customData "com.glyphsapp.layerIdsMapping".
+    # Before I update the fontra file, I would like to discuss with Just,
+    # if this is the right approach. test_putGlyph works now.
     assert referenceGlyph == glyph
 
 
@@ -135,10 +139,6 @@ async def test_getGlyph(testFont, referenceFont, glyphName):
 async def test_putGlyph(writableTestFont, testFont, glyphName):
     glyphMap = await writableTestFont.getGlyphMap()
     glyph = await writableTestFont.getGlyph(glyphName)
-    if glyphName == "A" and "com.glyphsapp.glyph-color" not in glyph.customData:
-        # glyphsLib doesn't read the color attr from Glyphs-2 files,
-        # so let's monkeypatch the data
-        glyph.customData = {"com.glyphsapp.glyph-color": [120, 220, 20, 4]}
 
     # for testing change every coordinate by 10 units
     for layerName, layer in iter(glyph.layers.items()):
@@ -155,12 +155,9 @@ async def test_putGlyph(writableTestFont, testFont, glyphName):
         assert savedGlyph.layers[layerName].glyph.xAdvance == 500
 
         for i, coordinate in enumerate(layer.glyph.path.coordinates):
-            expectedResult = coordinate + 10
-            # The follwing fails currently with: _part.shoulder, _part.stem and a
-            # I expect this is due to special layers.
-            # TODO: Fix issue with special layers.
             assert (
-                savedGlyph.layers[layerName].glyph.path.coordinates[i] == expectedResult
+                savedGlyph.layers[layerName].glyph.path.coordinates[i]
+                == coordinate + 10
             )
 
     assert savedGlyph != glyph
