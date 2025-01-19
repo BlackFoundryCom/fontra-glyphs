@@ -163,6 +163,21 @@ async def test_putGlyph(writableTestFont, testFont, glyphName):
     assert savedGlyph != glyph
 
 
+async def test_deleteLayer(writableTestFont):
+    glyphName = "A"
+    glyphMap = await writableTestFont.getGlyphMap()
+    glyph = await writableTestFont.getGlyph(glyphName)
+
+    layerName = "Regular (layer #1)"
+    del glyph.layers[layerName]
+
+    await writableTestFont.putGlyph(glyphName, glyph, glyphMap[glyphName])
+
+    savedGlyph = await writableTestFont.getGlyph(glyphName)
+
+    assert layerName not in savedGlyph.layers
+
+
 async def test_getKerning(testFont, referenceFont):
     assert await testFont.getKerning() == await referenceFont.getKerning()
 

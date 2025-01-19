@@ -829,7 +829,14 @@ def variableGlyphToGSGlyph(variableGlyph, gsGlyph):
     # TODO: convert fontra variableGlyph to GlyphsApp glyph
     layerIdsMapping = variableGlyph.customData["com.glyphsapp.layerIdsMapping"]
     for layerName, gsLayerId in layerIdsMapping.items():
-        fontraLayerToGSLayer(variableGlyph.layers[layerName], gsGlyph.layers[gsLayerId])
+        if layerName in variableGlyph.layers:
+            fontraLayerToGSLayer(
+                variableGlyph.layers[layerName], gsGlyph.layers[gsLayerId]
+            )
+        else:
+            # Someone removed a layer, for example a special layer.
+            # Therefore need to be removed from gsGlyph as well.
+            del gsGlyph.layers[gsLayerId]
 
     # What happens, if the number of layers differ from the original number?
     # How do we handle intermediate layers?
