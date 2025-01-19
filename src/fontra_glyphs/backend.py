@@ -393,9 +393,6 @@ class GlyphsBackend:
         writer.format_version = self.gsFont.format_version
         writer.write(gsGlyphNew)
 
-        self._writeRawGlyph(glyphName, f)
-
-    def _writeRawGlyph(self, glyphName, f):
         # 3. parse stream into "raw" object
         f.seek(0)
         rawGlyphData = openstep_plist.load(f, use_numbers=True)
@@ -405,6 +402,13 @@ class GlyphsBackend:
         self.rawGlyphsData[glyphIndex] = rawGlyphData
         self.rawFontData["glyphs"] = self.rawGlyphsData
 
+        self._writeRawGlyph(glyphName, f)
+
+        # 7. Remove glyph from parsed glyph names, because we changed it.
+        # Next time it needs to be parsed again.
+        self.parsedGlyphNames.discard(glyphName)
+
+    def _writeRawGlyph(self, glyphName, f):
         # 5. write whole file with openstep_plist
         with open(self.gsFilePath, "w", encoding="utf-8") as fp:
             openstep_plist.dump(

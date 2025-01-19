@@ -1,4 +1,6 @@
+import os
 import pathlib
+import shutil
 
 import pytest
 from fontra.backends import getFileSystemBackend
@@ -20,6 +22,17 @@ def testFont(request):
 @pytest.fixture(scope="module")
 def referenceFont(request):
     return getFileSystemBackend(referenceFontPath)
+
+
+@pytest.fixture(params=[glyphs2Path, glyphs3Path, glyphsPackagePath])
+def writableTestFont(tmpdir, request):
+    srcPath = request.param
+    dstPath = tmpdir / os.path.basename(srcPath)
+    if os.path.isdir(srcPath):
+        shutil.copytree(srcPath, dstPath)
+    else:
+        shutil.copy(srcPath, dstPath)
+    return getFileSystemBackend(dstPath)
 
 
 expectedAxes = structure(
@@ -119,9 +132,9 @@ async def test_getGlyph(testFont, referenceFont, glyphName):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("glyphName", list(expectedGlyphMap))
-async def test_putGlyph(testFont, referenceFont, glyphName):
-    glyphMap = await testFont.getGlyphMap()
-    glyph = await testFont.getGlyph(glyphName)
+async def test_putGlyph(writableTestFont, testFont, glyphName):
+    glyphMap = await writableTestFont.getGlyphMap()
+    glyph = await writableTestFont.getGlyph(glyphName)
     if glyphName == "A" and "com.glyphsapp.glyph-color" not in glyph.customData:
         # glyphsLib doesn't read the color attr from Glyphs-2 files,
         # so let's monkeypatch the data
@@ -129,17 +142,28 @@ async def test_putGlyph(testFont, referenceFont, glyphName):
 
     # for testing change every coordinate by 10 units
     for layerName, layer in iter(glyph.layers.items()):
+        layer.glyph.xAdvance = 500  # for testing change xAdvance
         for i, coordinate in enumerate(layer.glyph.path.coordinates):
             layer.glyph.path.coordinates[i] = coordinate + 10
 
-    # for testing change xAdvance
-    for layerName, layer in iter(glyph.layers.items()):
-        layer.glyph.xAdvance = 500
+    await writableTestFont.putGlyph(glyphName, glyph, glyphMap[glyphName])
 
-    await testFont.putGlyph(glyphName, glyph, glyphMap[glyphName])
+    savedGlyph = await writableTestFont.getGlyph(glyphName)
+    referenceGlyph = await testFont.getGlyph(glyphName)
 
-    referenceGlyph = await referenceFont.getGlyph(glyphName)
-    assert referenceGlyph == glyph
+    for layerName, layer in iter(referenceGlyph.layers.items()):
+        assert savedGlyph.layers[layerName].glyph.xAdvance == 500
+
+        for i, coordinate in enumerate(layer.glyph.path.coordinates):
+            expectedResult = coordinate + 10
+            # The follwing fails currently with: _part.shoulder, _part.stem and a
+            # I expect this is due to special layers.
+            # TODO: Fix issue with special layers.
+            assert (
+                savedGlyph.layers[layerName].glyph.path.coordinates[i] == expectedResult
+            )
+
+    assert savedGlyph != glyph
 
 
 async def test_getKerning(testFont, referenceFont):
