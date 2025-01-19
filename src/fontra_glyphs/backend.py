@@ -807,62 +807,24 @@ def saveFileWithGsFormatting(gsFilePath):
         file.write(content)
 
 
-def fontraLayerToGSLayer(layer, gsLayer=None):
-    if gsLayer is None:
-        gsLayer = glyphsLib.classes.GSLayer()
-
+def fontraLayerToGSLayer(layer, gsLayer):
     gsLayer.width = layer.glyph.xAdvance
 
-    return gsLayer
+    # Draw new paths with pen
+    gsLayer.paths = []  # first: remove all paths
+    pen = gsLayer.getPointPen()
+    layer.glyph.path.drawPoints(pen)
 
+    gsLayer.drawPoints(pen)
 
-def fontraLayerToGSPaths(layer, gsLayer=None):
-    if gsLayer is None:
-        gsLayer = glyphsLib.classes.GSLayer()
-
-    gsPaths = []
-    # I have the feeling the following goes into the wrong direction.
-    # It might should work with a pen and with the help of glyphsLib.
-    for i, contour in enumerate(layer.glyph.path.unpackedContours()):
-        gsPath = glyphsLib.classes.GSPath()
-        gsPath.closed = contour["isClosed"]
-        gsPath.nodes = []
-
-        for j, point in enumerate(contour["points"]):
-            gsNode = glyphsLib.classes.GSNode()
-            gsNode.position = (
-                point["x"],
-                point["y"],
-            )  # glyphsLib.classes.Point(point["x"], point["y"])
-            gsNode.smooth = point.get("smooth", False)
-            # gsNode.type = fontraPointTypeToGsNodeType(point.get("type"))
-            gsPath.nodes.append(gsNode)
-        gsPaths.append(gsPath)
-
-    return gsPaths
-
-
-def fontraPointTypeToGsNodeType(pointType):
-    # The type of the node, LINE, CURVE or OFFCURVE
-    # https://docu.glyphsapp.com/#GSNode.type
-    if pointType is None:
-        # Can either be LINE or CURVE, I am currently not sure how to figure this out.
-        return "LINE"  # "CURVE"
-    elif pointType == "cubic":
-        return "OFFCURVE"
-    elif pointType == "quad":
-        return "QCURVE"
+    # TODO: anchors, components, etc.
 
 
 def variableGlyphToGsGlyph(variableGlyph, gsGlyph):
     # TODO: convert fontra variableGlyph to GlyphsApp glyph
 
     for i, (layerName, layer) in enumerate(iter(variableGlyph.layers.items())):
-        gsLayerCopy = deepcopy(gsGlyph.layers[i])
-        gsGlyph.layers[i].width = layer.glyph.xAdvance
-        gsGlyph.layers[i].paths = fontraLayerToGSPaths(layer, gsLayerCopy)
-
-        # gsGlyph.layers[i] = fontraLayerToGSLayer(layer, gsLayerCopy)
+        fontraLayerToGSLayer(layer, gsGlyph.layers[i])
 
     return gsGlyph
 
