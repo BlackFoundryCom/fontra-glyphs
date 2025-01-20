@@ -1,5 +1,8 @@
+import io
 import pathlib
-from collections import defaultdict
+import re
+from collections import OrderedDict, defaultdict
+from copy import deepcopy
 from os import PathLike
 from typing import Any
 
@@ -16,6 +19,7 @@ from fontra.core.classes import (
     GlyphAxis,
     GlyphSource,
     Guideline,
+    ImageData,
     Kerning,
     Layer,
     LineMetric,
@@ -24,7 +28,7 @@ from fontra.core.classes import (
     VariableGlyph,
 )
 from fontra.core.path import PackedPathPointPen
-from fontra.core.protocols import ReadableFontBackend
+from fontra.core.protocols import WritableFontBackend
 from fontTools.designspaceLib import DesignSpaceDocument
 from fontTools.misc.transform import DecomposedTransform
 from glyphsLib.builder.axes import (
@@ -81,13 +85,14 @@ GS_FORMAT_3_KERN_SIDES = [
 
 class GlyphsBackend:
     @classmethod
-    def fromPath(cls, path: PathLike) -> ReadableFontBackend:
+    def fromPath(cls, path: PathLike) -> WritableFontBackend:
         self = cls()
         self._setupFromPath(path)
         return self
 
     def _setupFromPath(self, path: PathLike) -> None:
         gsFont = glyphsLib.classes.GSFont()
+        self.gsFilePath = path
 
         rawFontData, rawGlyphsData = self._loadFiles(path)
 
@@ -100,7 +105,8 @@ class GlyphsBackend:
         self.gsFont.glyphs = [
             glyphsLib.classes.GSGlyph() for i in range(len(rawGlyphsData))
         ]
-        self.rawGlyphsData = rawGlyphsData
+        self.rawFontData = toOrderedDict(rawFontData)
+        self.rawGlyphsData = toOrderedDict(rawGlyphsData)
 
         self.glyphNameToIndex = {
             glyphData["glyphname"]: i for i, glyphData in enumerate(rawGlyphsData)
@@ -157,6 +163,14 @@ class GlyphsBackend:
     async def getGlyphMap(self) -> dict[str, list[int]]:
         return self.glyphMap
 
+    async def putGlyphMap(self, value: dict[str, list[int]]) -> None:
+        print("GlyphsBackend putGlyphMap: ", value)
+        pass
+
+    async def deleteGlyph(self, glyphName):
+        print("GlyphsBackend deleteGlyph: ", glyphName)
+        pass
+
     async def getFontInfo(self) -> FontInfo:
         infoDict = {}
         for name in rootInfoNames:
@@ -172,14 +186,30 @@ class GlyphsBackend:
 
         return FontInfo(**infoDict)
 
+    async def putFontInfo(self, fontInfo: FontInfo):
+        print("GlyphsBackend putFontInfo: ", fontInfo)
+        pass
+
     async def getSources(self) -> dict[str, FontSource]:
         return gsMastersToFontraFontSources(self.gsFont, self.locationByMasterID)
+
+    async def putSources(self, sources: dict[str, FontSource]) -> None:
+        print("GlyphsBackend putSources: ", sources)
+        pass
 
     async def getAxes(self) -> Axes:
         return Axes(axes=self.axes)
 
+    async def putAxes(self, axes: Axes) -> None:
+        print("GlyphsBackend putAxes: ", axes)
+        pass
+
     async def getUnitsPerEm(self) -> int:
         return self.gsFont.upm
+
+    async def putUnitsPerEm(self, value: int) -> None:
+        print("GlyphsBackend putUnitsPerEm: ", value)
+        pass
 
     async def getKerning(self) -> dict[str, Kerning]:
         # TODO: RTL kerning: https://docu.glyphsapp.com/#GSFont.kerningRTL
@@ -200,12 +230,31 @@ class GlyphsBackend:
             kerning["vkrn"] = kerningVertical
         return kerning
 
+    async def putKerning(self, kerning: dict[str, Kerning]) -> None:
+        print("GlyphsBackend putKerning: ", kerning)
+        pass
+
     async def getFeatures(self) -> OpenTypeFeatures:
         # TODO: extract features
         return OpenTypeFeatures()
 
+    async def putFeatures(self, features: OpenTypeFeatures) -> None:
+        print("GlyphsBackend putFeatures: ", features)
+        pass
+
+    async def getBackgroundImage(self, imageIdentifier: str) -> ImageData | None:
+        return None
+
+    async def putBackgroundImage(self, imageIdentifier: str, data: ImageData) -> None:
+        print("GlyphsBackend putBackgroundImage: ", imageIdentifier, data)
+        pass
+
     async def getCustomData(self) -> dict[str, Any]:
         return {}
+
+    async def putCustomData(self, lib):
+        print("GlyphsBackend putCustomData: ", lib)
+        pass
 
     async def getGlyph(self, glyphName: str) -> VariableGlyph | None:
         if glyphName not in self.glyphNameToIndex:
@@ -236,7 +285,7 @@ class GlyphsBackend:
         gsLayers = sorted(
             gsLayers, key=lambda i_gsLayer: masterOrder[i_gsLayer[1].associatedMasterId]
         )
-
+        layerIdsMapping = {}
         seenLocations = []
         for i, gsLayer in gsLayers:
             braceLocation = self._getBraceLayerLocation(gsLayer)
@@ -247,6 +296,7 @@ class GlyphsBackend:
             else:
                 sourceName = gsLayer.name or masterName
             layerName = f"{sourceName} (layer #{i})"
+            layerIdsMapping[layerName] = gsLayer.layerId
 
             location = {
                 **self.locationByMasterID[gsLayer.associatedMasterId],
@@ -270,6 +320,7 @@ class GlyphsBackend:
             )
             layers[layerName] = gsLayerToFontraLayer(gsLayer, self.axisNames)
 
+        customData["com.glyphsapp.layerIdsMapping"] = layerIdsMapping
         fixSourceLocations(sources, set(smartLocation))
 
         glyph = VariableGlyph(
@@ -287,7 +338,7 @@ class GlyphsBackend:
 
         glyphIndex = self.glyphNameToIndex[glyphName]
         rawGlyphData = self.rawGlyphsData[glyphIndex]
-        self.rawGlyphsData[glyphIndex] = None
+        # self.rawGlyphsData[glyphIndex] = None
         self.parsedGlyphNames.add(glyphName)
 
         gsGlyph = glyphsLib.classes.GSGlyph()
@@ -330,6 +381,50 @@ class GlyphsBackend:
             if value != localAxesByName[name].defaultValue
         }
 
+    async def putGlyph(
+        self, glyphName: str, glyph: VariableGlyph, codePoints: list[int]
+    ) -> None:
+        # 1. convert VariableGlyph to GSGlyph (but start with a copy of the original)
+        gsGlyphNew = variableGlyphToGSGlyph(
+            glyph, deepcopy(self.gsFont.glyphs[glyphName])
+        )
+
+        # 2. serialize to text with glyphsLib.writer.Writer(), using io.StringIO or io.BytesIO
+        f = io.StringIO()
+        writer = glyphsLib.writer.Writer(f)
+        writer.format_version = self.gsFont.format_version
+        writer.write(gsGlyphNew)
+
+        # 3. parse stream into "raw" object
+        f.seek(0)
+        rawGlyphData = openstep_plist.load(f, use_numbers=True)
+
+        # 4. replace original "raw" object with new "raw" object
+        glyphIndex = self.glyphNameToIndex[glyphName]
+        self.rawGlyphsData[glyphIndex] = rawGlyphData
+        self.rawFontData["glyphs"] = self.rawGlyphsData
+
+        self._writeRawGlyph(glyphName, f)
+
+        # 7. Remove glyph from parsed glyph names, because we changed it.
+        # Next time it needs to be parsed again.
+        self.parsedGlyphNames.discard(glyphName)
+
+    def _writeRawGlyph(self, glyphName, f):
+        # 5. write whole file with openstep_plist
+        with open(self.gsFilePath, "w", encoding="utf-8") as fp:
+            openstep_plist.dump(
+                self.rawFontData,
+                fp,
+                unicode_escape=False,
+                indent=0,
+                single_line_tuples=True,
+                escape_newlines=False,
+            )
+
+        # 6. fix formatting
+        saveFileWithGsFormatting(self.gsFilePath)
+
     async def aclose(self) -> None:
         pass
 
@@ -370,6 +465,29 @@ class GlyphsPackageBackend(GlyphsBackend):
         rawGlyphsData.sort(key=sortKey)
 
         return rawFontData, rawGlyphsData
+
+    def _writeRawGlyph(self, glyphName, f):
+        filePath = self.getGlyphFilePath(glyphName)
+        filePath.write_text(f.getvalue(), encoding="utf=8")
+
+    def getGlyphFilePath(self, glyphName):
+        glyphsPath = pathlib.Path(self.gsFilePath) / "glyphs"
+        # TODO: Get the right glyph file name might be challenging,
+        # because for example the glyph A-cy is stored in the package as A_-cy.glyph
+        realGlyphName = getGlyphspackageGlyphFileName(glyphName)
+        return glyphsPath / (realGlyphName + ".glyph")
+
+
+def getGlyphspackageGlyphFileName(glyphName):
+    nameParts = glyphName.split("-")
+    firstPart = (
+        f"{nameParts[0]}_"
+        if len(nameParts[0]) == 1 and nameParts[0].isupper()
+        else nameParts[0]
+    )
+    nameParts[0] = firstPart
+
+    return "-".join(nameParts)
 
 
 def _readGlyphMapAndKerningGroups(
@@ -640,3 +758,119 @@ def gsVerticalMetricsToFontraLineMetricsHorizontal(gsFont, gsMaster):
     #         )
 
     return lineMetricsHorizontal
+
+
+def saveFileWithGsFormatting(gsFilePath):
+    # openstep_plist.dump changes the whole formatting, therefore
+    # it's very diffucute to see what has changed.
+    # This function is a very bad try to get close to how the formatting
+    # looks like for a .glyphs file.
+    # There must be a better solution, but this is better than nothing.
+    with open(gsFilePath, "r", encoding="utf-8") as file:
+        content = file.read()
+
+    content = re.sub(r"pos = \(\s*(-?\d+),\s*(-?\d+)\s*\);", r"pos = (\1,\2);", content)
+
+    content = re.sub(
+        r"pos = \(\s*([\d.]+),\s*([\d.]+)\s*\);", r"pos = (\1,\2);", content
+    )
+
+    content = re.sub(
+        r"\(\s*([\d.]+),\s*(-?\d+),\s*([a-zA-Z])\s*\)", r"(\1,\2,\3)", content
+    )
+
+    content = re.sub(
+        r"origin = \(\s*(-?\d+),\s*(-?\d+)\s*\);", r"origin = (\1,\2);", content
+    )
+
+    content = re.sub(
+        r"target = \(\s*(-?\d+),\s*(-?\d+)\s*\);", r"target = (\1,\2);", content
+    )
+
+    content = re.sub(
+        r"color = \(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\s*\);",
+        r"color = (\1,\2,\3,\4);",
+        content,
+    )
+
+    content = re.sub(
+        r"\(\s*(-?\d+),\s*(-?\d+),\s*([a-zA-Z]+)\s*\)", r"(\1,\2,\3)", content
+    )
+
+    content = re.sub(
+        r"\(\s*(-?\d+),\s*(-?\d+),\s*([a-zA-Z]),\s*\{", r"(\1,\2,\3,{", content
+    )
+
+    content = re.sub(
+        r"\(\s*(-?\d+),\s*(-?\d+),\s*([a-zA-Z]+),\s*\{", r"(\1,\2,\3,{", content
+    )
+
+    content = re.sub(r"\}\s*\),", r"}),", content)
+
+    content += "\n"  # add blank break at the end of the file.
+
+    with open(gsFilePath, "w", encoding="utf-8") as file:
+        file.write(content)
+
+
+def fontraLayerToGSLayer(layer, gsLayer):
+    # Draw new paths with pen
+    gsLayer.paths = []  # first: remove all paths
+    pen = gsLayer.getPointPen()
+    layer.glyph.path.drawPoints(pen)
+
+    gsLayer.drawPoints(pen)
+    gsLayer.width = layer.glyph.xAdvance
+    # gsLayer.components = components  # https://docu.glyphsapp.com/#GSLayer.components
+    # gsLayer.anchors = anchors  # https://docu.glyphsapp.com/#GSLayer.anchors
+
+
+def variableGlyphToGSGlyph(variableGlyph, gsGlyph):
+    # TODO: convert fontra variableGlyph to GlyphsApp glyph
+    layerIdsMapping = variableGlyph.customData["com.glyphsapp.layerIdsMapping"]
+    for layerName, gsLayerId in layerIdsMapping.items():
+        if layerName not in variableGlyph.layers:
+            # Someone removed a layer, for example a special layer.
+            # Therefore need to be removed from gsGlyph as well.
+            del gsGlyph.layers[gsLayerId]
+
+    for i, (layerName, layer) in enumerate(iter(variableGlyph.layers.items())):
+        gsLayerId = layerIdsMapping.get(layerName)
+        if gsLayerId is not None:
+            # gsLayer exists, modify existing gsLayer
+            fontraLayerToGSLayer(layer, gsGlyph.layers[gsLayerId])
+        else:
+            # gsLayer does not exists, therefore must be 'isSpecialLayer'
+            # and need to be added as a new layer:
+            newLayer = glyphsLib.classes.GSLayer()
+            newLayer.name = layerName
+            newLayer.isSpecialLayer = True
+
+            source = variableGlyph.sources[i]
+            newLayer.attributes["coordinates"] = [
+                source.location[axis.name.lower()]
+                for axis in gsGlyph.parent.axes
+                if source.location.get(axis.name.lower())
+            ]
+
+            # TODO: the name need probably further modifications
+            # + best guess for associatedMasterId
+            # newLayer.associatedMasterId = gsGlyph.layers[0].associatedMasterId
+            fontraLayerToGSLayer(layer, newLayer)
+            gsGlyph.layers.append(newLayer)
+
+    # It might be that someone deletes a not needed master-layer, which works for fontra,
+    # but is required for Glyphs. We would need to get the intermediate contours.
+
+    return gsGlyph
+
+
+# The following is obsolete once this is merged:
+# https://github.com/fonttools/openstep-plist/pull/35
+def toOrderedDict(obj):
+    if isinstance(obj, dict):
+        return OrderedDict({k: toOrderedDict(v) for k, v in obj.items()})
+    elif isinstance(obj, list):
+        return [toOrderedDict(item) for item in obj]
+    else:
+        return obj
