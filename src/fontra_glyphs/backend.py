@@ -837,23 +837,29 @@ def variableGlyphToGSGlyph(variableGlyph, gsGlyph):
     for i, (layerName, layer) in enumerate(iter(variableGlyph.layers.items())):
         gsLayerId = layerIdsMapping.get(layerName)
         if gsLayerId is not None:
-            # gsLayerExists
+            # gsLayer exists, modify existing gsLayer
             fontraLayerToGSLayer(layer, gsGlyph.layers[gsLayerId])
         else:
-            # gsLayer does not exists, therefore add new layer:
+            # gsLayer does not exists, therefore must be 'isSpecialLayer'
+            # and need to be added as a new layer:
             newLayer = glyphsLib.classes.GSLayer()
             newLayer.name = layerName
+            newLayer.isSpecialLayer = True
+
+            source = variableGlyph.sources[i]
+            newLayer.attributes["coordinates"] = [
+                source.location[axis.name.lower()]
+                for axis in gsGlyph.parent.axes
+                if source.location.get(axis.name.lower())
+            ]
+
             # TODO: the name need probably further modifications
             # + best guess for associatedMasterId
             # newLayer.associatedMasterId = gsGlyph.layers[0].associatedMasterId
-            # newLayer.isSpecialLayer = True
+            fontraLayerToGSLayer(layer, newLayer)
             gsGlyph.layers.append(newLayer)
 
-    # What happens, if the number of layers differ from the original number?
-    # How do we handle intermediate layers?
-    # https://docu.glyphsapp.com/#GSGlyph.layers font.glyphs['a'].layers.append(newLayer)
-    # How do we handle missing masters?
-    # It might be that someone deletes a not needed layer, which works for fontra,
+    # It might be that someone deletes a not needed master-layer, which works for fontra,
     # but is required for Glyphs. We would need to get the intermediate contours.
 
     return gsGlyph

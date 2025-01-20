@@ -1,17 +1,11 @@
 import os
 import pathlib
 import shutil
+from copy import deepcopy
 
 import pytest
 from fontra.backends import getFileSystemBackend
-from fontra.core.classes import (
-    Axes,
-    FontInfo,
-    GlyphSource,
-    Layer,
-    StaticGlyph,
-    structure,
-)
+from fontra.core.classes import Axes, FontInfo, GlyphSource, Layer, structure
 
 dataDir = pathlib.Path(__file__).resolve().parent / "data"
 
@@ -194,13 +188,18 @@ async def test_addLayer(writableTestFont):
     glyph.sources.append(
         GlyphSource(name="{166, 100}", location={"weight": 166}, layerName="{166, 100}")
     )
-    glyph.layers["{166, 100}"] = Layer(glyph=StaticGlyph())
+    # Copy StaticGlyph of Bold:
+    glyph.layers["{166, 100}"] = Layer(
+        glyph=deepcopy(glyph.layers["Bold (layer #2)"].glyph)
+    )
 
     await writableTestFont.putGlyph(glyphName, glyph, glyphMap[glyphName])
 
     savedGlyph = await writableTestFont.getGlyph(glyphName)
-    # TODO: we don't have a associated master concept with fontra.
-    assert len(savedGlyph.layers.keys()) > numGlyphLayers
+    assert len(savedGlyph.layers) > numGlyphLayers
+    # TODO: We don't have a associated master concept with fontra,
+    # therefore the name contains 'Light' (The first master)
+    assert "Light / {166, 100} (layer #4)" in savedGlyph.layers.keys()
 
 
 async def test_getKerning(testFont, referenceFont):
