@@ -7,6 +7,21 @@ def getLocationFromSources(sources, layerName):
     return s.location
 
 
+def splitLocation(location, glyphAxes):
+    glyphAxisNames = {axis.name for axis in glyphAxes}
+
+    fontLocation = {}
+    glyphLocation = {}
+
+    for axisName, axisValue in location.items():
+        if axisName in glyphAxisNames:
+            glyphLocation[axisName] = axisValue
+        else:
+            fontLocation[axisName] = axisValue
+
+    return fontLocation, glyphLocation
+
+
 def getSourceNameWithLayerName(sources, layerName):
     for source in sources:
         if source.layerName == layerName:

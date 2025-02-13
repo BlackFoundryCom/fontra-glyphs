@@ -47,6 +47,7 @@ from .utils import (
     getLocationFromSources,
     getSourceNameWithLayerName,
     matchTreeFont,
+    splitLocation,
 )
 
 rootInfoNames = [
@@ -371,6 +372,11 @@ class GlyphsBackend:
     def _getBraceLayerLocation(self, gsLayer):
         if not gsLayer._is_brace_layer():
             return {}
+        if gsLayer.smartComponentPoleMapping:
+            # It's a intermediate layer within a smart component, if it has
+            # _brace_coordinates and smartComponentPoleMapping,
+            # We need to skip this and get the valid data via _getSmartLocation
+            return {}
 
         return dict(
             (axis.name, value)
@@ -378,13 +384,21 @@ class GlyphsBackend:
         )
 
     def _getSmartLocation(self, gsLayer, localAxesByName):
+        # If has _brace_coordinates: it is an intermidiate layer in a smart component
+        coords = gsLayer._brace_coordinates() or []
         location = {
             name: (
-                localAxesByName[name].minValue
-                if poleValue == Pole.MIN
-                else localAxesByName[name].maxValue
+                coords[i]
+                if len(coords) - 1 >= i
+                else (
+                    localAxesByName[name].minValue
+                    if poleValue == Pole.MIN
+                    else localAxesByName[name].maxValue
+                )
             )
-            for name, poleValue in gsLayer.smartComponentPoleMapping.items()
+            for i, (name, poleValue) in enumerate(
+                gsLayer.smartComponentPoleMapping.items()
+            )
         }
         return {
             disambiguateLocalAxisName(name, self.axisNames): value
@@ -789,6 +803,15 @@ def variableGlyphToGSGlyph(defaultLocation, variableGlyph, gsGlyph):
         # Removing layer:
         del gsGlyph.layers[gsLayerId]
 
+    # prepare smart component glyph
+    if variableGlyph.axes and not gsGlyph.smartComponentAxes:
+        for axis in variableGlyph.axes:
+            gsAxis = glyphsLib.classes.GSSmartComponentAxis()
+            gsAxis.name = axis.name
+            gsAxis.bottomValue = axis.minValue
+            gsAxis.topValue = axis.maxValue
+            gsGlyph.smartComponentAxes.append(gsAxis)
+
     for layerName, layer in iter(variableGlyph.layers.items()):
         gsLayer = gsGlyph.layers[layerName]
         # layerName is equal to gsLayer.layerId if it comes from Glyphsapp,
@@ -800,24 +823,42 @@ def variableGlyphToGSGlyph(defaultLocation, variableGlyph, gsGlyph):
         else:
             # gsLayer does not exist – create new layer:
             gsLayer = glyphsLib.classes.GSLayer()
+            gsLayer.parent = gsGlyph
 
             sourceLocation = getLocationFromSources(variableGlyph.sources, layerName)
-            location = makeDenseLocation(sourceLocation, defaultLocation)
-            gsLocation = []
+            fontLocation, glyphLocation = splitLocation(
+                sourceLocation, variableGlyph.axes
+            )
+            fontLocation = makeDenseLocation(fontLocation, defaultLocation)
+
+            gsFontLocation = []
             for axis in gsGlyph.parent.axes:
-                if location.get(axis.name):
-                    gsLocation.append(location[axis.name])
+                if fontLocation.get(axis.name):
+                    gsFontLocation.append(fontLocation[axis.name])
                 else:
                     # This 'else' is necessary for GlyphsApp 2 files, only.
                     # 'Weight' and 'Width' are always there,
                     # even if there is no axis specified for it.
                     factory = AxisDefinitionFactory()
                     axis_def = factory.get(axis.axisTag, axis.name)
-                    gsLocation.append(axis_def.default_user_loc)
+                    gsFontLocation.append(axis_def.default_user_loc)
+
+            gsGlyphLocation = []
+            for axis in gsGlyph.smartComponentAxes:
+                if axis.name not in glyphLocation:
+                    # This might be the case if we create a new glyph axis in Fontra
+                    continue
+                gsGlyphLocation.append(glyphLocation[axis.name])
+                pole = (
+                    Pole.MIN
+                    if axis.bottomValue == glyphLocation[axis.name]
+                    else Pole.MAX
+                )
+                gsLayer.smartComponentPoleMapping[axis.name] = pole
 
             sourceName = getSourceNameWithLayerName(variableGlyph.sources, layerName)
-            masterId = gsMasterAxesToIdMapping.get(tuple(gsLocation))
-            if masterId:
+            masterId = gsMasterAxesToIdMapping.get(tuple(gsFontLocation))
+            if masterId and not gsGlyphLocation:
                 gsLayer.name = gsMasterIdToNameMapping.get(masterId)
                 gsLayer.layerId = masterId
                 if gsLayer.name != sourceName:
@@ -826,6 +867,7 @@ def variableGlyphToGSGlyph(defaultLocation, variableGlyph, gsGlyph):
                 if gsLayer.name != layerName:
                     gsLayer.userData["xyz.fontra.layer-name"] = layerName
             else:
+                gsLocation = gsGlyphLocation or gsFontLocation
                 gsLayer.layerId = layerName
                 gsLayer.userData["xyz.fontra.source-name"] = sourceName
                 gsLayer.attributes["coordinates"] = gsLocation
@@ -833,7 +875,9 @@ def variableGlyphToGSGlyph(defaultLocation, variableGlyph, gsGlyph):
                 gsLayer.name = "{" + ",".join(str(x) for x in gsLocation) + "}"
                 gsLayer.isSpecialLayer = True
 
-                associatedMasterId = getAssociatedMasterId(gsGlyph.parent, gsLocation)
+                associatedMasterId = getAssociatedMasterId(
+                    gsGlyph.parent, gsFontLocation
+                )
                 if associatedMasterId:
                     gsLayer.associatedMasterId = associatedMasterId
 
