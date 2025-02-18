@@ -1,5 +1,5 @@
 {
-"name": "Adieresis",
+"name": "A-cy",
 "sources": [
 {
 "name": "Light",
@@ -26,13 +26,6 @@
 "components": [
 {
 "name": "A"
-},
-{
-"name": "dieresis",
-"transformation": {
-"translateX": 128,
-"translateY": 220
-}
 }
 ],
 "xAdvance": 657
@@ -43,13 +36,6 @@
 "components": [
 {
 "name": "A"
-},
-{
-"name": "dieresis",
-"transformation": {
-"translateX": 110,
-"translateY": 210
-}
 }
 ],
 "xAdvance": 753
@@ -60,13 +46,6 @@
 "components": [
 {
 "name": "A"
-},
-{
-"name": "dieresis",
-"transformation": {
-"translateX": 110,
-"translateY": 230
-}
 }
 ],
 "xAdvance": 593

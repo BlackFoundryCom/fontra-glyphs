@@ -40,16 +40,12 @@
 },
 {
 "name": "Regular",
-"layerName": "3E7589AA-8194-470F-8E2F-13C1C581BE24",
-"location": {
-"Weight": 90
-}
+"layerName": "3E7589AA-8194-470F-8E2F-13C1C581BE24"
 },
 {
 "name": "Regular / NarrowShoulder",
 "layerName": "595FDB8C-ED41-486A-B76A-0FEFEF8BCDD1",
 "location": {
-"Weight": 90,
 "shoulderWidth": 0
 }
 },
@@ -57,7 +53,6 @@
 "name": "Regular / LowCrotch",
 "layerName": "65575EEB-523C-4A39-985D-FB9ACFE951AF",
 "location": {
-"Weight": 90,
 "crotchDepth": -100
 }
 },
