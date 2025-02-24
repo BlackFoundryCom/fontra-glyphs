@@ -10,10 +10,7 @@
 },
 {
 "name": "Regular",
-"layerName": "3E7589AA-8194-470F-8E2F-13C1C581BE24",
-"location": {
-"Weight": 90
-}
+"layerName": "3E7589AA-8194-470F-8E2F-13C1C581BE24"
 },
 {
 "name": "Bold",
@@ -28,10 +25,16 @@
 "glyph": {
 "components": [
 {
-"name": "_part.shoulder"
+"name": "_part.shoulder",
+"customData": {
+"com.glyphsapp.component.alignment": -1
+}
 },
 {
-"name": "_part.stem"
+"name": "_part.stem",
+"customData": {
+"com.glyphsapp.component.alignment": -1
+}
 }
 ],
 "xAdvance": 528
@@ -41,10 +44,16 @@
 "glyph": {
 "components": [
 {
-"name": "_part.shoulder"
+"name": "_part.shoulder",
+"customData": {
+"com.glyphsapp.component.alignment": -1
+}
 },
 {
-"name": "_part.stem"
+"name": "_part.stem",
+"customData": {
+"com.glyphsapp.component.alignment": -1
+}
 }
 ],
 "xAdvance": 560
@@ -54,10 +63,16 @@
 "glyph": {
 "components": [
 {
-"name": "_part.shoulder"
+"name": "_part.shoulder",
+"customData": {
+"com.glyphsapp.component.alignment": -1
+}
 },
 {
-"name": "_part.stem"
+"name": "_part.stem",
+"customData": {
+"com.glyphsapp.component.alignment": -1
+}
 }
 ],
 "xAdvance": 501

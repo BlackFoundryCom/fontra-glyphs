@@ -2348,6 +2348,39 @@ rightMetricsKey = "=|V";
 topKerningGroup = VTop;
 bottomKerningGroup = VBottom;
 unicode = 0056;
+},
+{
+glyphname = A-cy;
+layers = (
+{
+components = (
+{
+name = A;
+}
+);
+layerId = "C4872ECA-A3A9-40AB-960A-1DB2202F16DE";
+width = 593;
+},
+{
+components = (
+{
+name = A;
+}
+);
+layerId = "3E7589AA-8194-470F-8E2F-13C1C581BE24";
+width = 657;
+},
+{
+components = (
+{
+name = A;
+}
+);
+layerId = "BFFFD157-90D3-4B85-B99D-9A2F366F03CA";
+width = 753;
+}
+);
+unicode = 0410;
 }
 );
 instances = (
